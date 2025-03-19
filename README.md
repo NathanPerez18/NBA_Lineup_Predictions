@@ -21,6 +21,6 @@ After cloning the repo, with just the code files and the raw data files:
 An overview of the results.
 First attempt: 0%
 Second attempt: 3%
-Third attempt: 7%
+Third attempt: 7% accuracy.
 
 Model Files:https://drive.google.com/drive/folders/178vieY0BDe49yrKR40BKXo6sazqFXYek?usp=sharing
