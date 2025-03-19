@@ -2,41 +2,80 @@ import os
 import pandas as pd
 import pickle
 
-# Define file paths
-test_file_path = "../Test/professor_test_data.csv"  # Original test file
-encoded_test_file_path = "../Test/encoded_test_data.csv"  # Encoded version
-player_encoding_path = "player_encoding.pkl"  # Encoding dictionary
+# Define paths
+test_folder = "../Test"
+encoded_test_folder = "../Encoded_Test"
+dictionary_folder = "../Dictionaries"
 
-# Load player encoding dictionary
-with open(player_encoding_path, "rb") as f:
+# Ensure the encoded test folder exists
+os.makedirs(encoded_test_folder, exist_ok=True)
+
+# Load encoding dictionaries
+with open(os.path.join(dictionary_folder, "season_encoding.pkl"), "rb") as f:
+    season_dict = pickle.load(f)
+
+with open(os.path.join(dictionary_folder, "team_encoding.pkl"), "rb") as f:
+    team_dict = pickle.load(f)
+
+with open(os.path.join(dictionary_folder, "player_encoding.pkl"), "rb") as f:
     player_dict = pickle.load(f)
 
-# Create a reverse lookup dictionary to decode predictions
+# Reverse dictionaries for decoding (if needed)
 reverse_player_dict = {v: k for k, v in player_dict.items()}
+reverse_team_dict = {v: k for k, v in team_dict.items()}
+reverse_season_dict = {v: k for k, v in season_dict.items()}
 
-# Load test dataset
-test_data = pd.read_csv(test_file_path)
+# Columns to process
+player_columns = ["home_0", "home_1", "home_2", "home_3", "home_4",
+                  "away_0", "away_1", "away_2", "away_3", "away_4"]
+team_columns = ["home_team", "away_team"]
+season_column = "season"
 
-# Identify the missing player column
-missing_player_col = []
-player_columns = ["home_0", "home_1", "home_2", "home_3", "home_4"]
+# ---------------------------
+# Step 2: Process Each Test File
+# ---------------------------
+for filename in os.listdir(test_folder):
+    if filename.endswith("a.csv"):  # Process only CSV files
+        file_path = os.path.join(test_folder, filename)
+        print(f"📂 Processing {filename}...")
 
-for index, row in test_data.iterrows():
-    for col in player_columns:
-        if str(row[col]).strip() == "?":  # If the player name is missing
-            missing_player_col.append(col)
-            test_data.at[index, col] = -1  # Replace missing player with -1
-            break  # Only one missing player per row
+        # Load test data
+        df = pd.read_csv(file_path)
 
-# Encode all remaining player names using the dictionary
-for col in player_columns + ["away_0", "away_1", "away_2", "away_3", "away_4"]:
-    test_data[col] = test_data[col].map(player_dict).fillna(-1).astype(int)  # Encode players, use -1 for unknowns
+        # ✅ Normalize column names to avoid KeyErrors
+        df.columns = df.columns.str.strip().str.lower()
 
-# Save the processed test file
-test_data.to_csv(encoded_test_file_path, index=False)
-print(f"✅ Encoded test file saved at: {encoded_test_file_path}")
+        # Debugging step to confirm column names
+        print(f"🔍 Columns found: {df.columns.tolist()}")
 
-# Save missing player column info for later
-missing_info_path = "../Test/missing_player_positions.csv"
-pd.DataFrame({"Game_ID": test_data.index, "Missing_Player_Column": missing_player_col}).to_csv(missing_info_path, index=False)
-print(f"✅ Missing player positions saved at: {missing_info_path}")
+        # Drop unwanted columns
+        if "starting_min" in df.columns:
+            df = df.drop(columns=["starting_min"])
+
+        # Encode the season column
+        if season_column in df.columns:
+            df[season_column] = df[season_column].map(season_dict)
+
+        # Encode team columns
+        for col in team_columns:
+            df[col] = df[col].map(team_dict)
+
+        # Encode player columns (handle missing player '?')
+        for col in player_columns:
+            df[col] = df[col].map(player_dict).fillna(-1)  # -1 for missing players
+
+        # Save the encoded test data
+        encoded_path = os.path.join(encoded_test_folder, filename)
+        df.to_csv(encoded_path, index=False)
+        print(f"✅ Encoded test data saved at: {encoded_path}")
+
+# Save updated dictionaries
+with open(os.path.join(dictionary_folder, "player_encoding.pkl"), "wb") as f:
+    pickle.dump(player_dict, f)
+
+with open(os.path.join(dictionary_folder, "team_encoding.pkl"), "wb") as f:
+    pickle.dump(team_dict, f)
+
+print("✅ Updated dictionaries saved with new players and teams!")
+
+print("🎯 All test files have been processed and saved!")

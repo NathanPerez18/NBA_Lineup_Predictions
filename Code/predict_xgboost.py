@@ -1,67 +1,66 @@
 import os
 import pandas as pd
 import pickle
+import xgboost as xgb
 
-# Define folder paths
-model_folder = "../Model"
-test_file_path = "../Test/encoded_test_data.csv"
-missing_info_path = "../Test/missing_player_positions.csv"
-output_predictions_path = os.path.join(model_folder, "final_predictions.csv")
+# Define paths
+model_path = "../Model/xgboost_model_v2.pkl"
+preprocessed_test_folder = "../Pre-Processed-Test"
+dictionary_folder = "../Dictionaries"
+output_predictions_path = "../Model/final_predictions.csv"
 
-# Load test data
-X_test = pd.read_csv(test_file_path)
-missing_info = pd.read_csv(missing_info_path)
-
-# ✅ Ensure only test cases from the 2007 season are used
-X_test = X_test[X_test["season"] == 2007]  # Filter test data
-filtered_missing_info = missing_info[missing_info["Game_ID"].isin(X_test.index)]
-
-# Drop non-numeric columns from test data
-X_test = X_test.select_dtypes(include=["number"])
-
-# Load player encoding dictionary
-with open("player_encoding.pkl", "rb") as f:
+# Load encoding dictionaries
+with open(os.path.join(dictionary_folder, "player_encoding.pkl"), "rb") as f:
     player_dict = pickle.load(f)
 
 # Reverse dictionary for decoding predictions
 reverse_player_dict = {v: k for k, v in player_dict.items()}
 
-# Initialize final predictions DataFrame
-final_predictions = X_test.copy()
+# Load trained model
+with open(model_path, "rb") as f:
+    model = pickle.load(f)
 
-print("🔄 Making predictions on test data...")
+# Process test files
+final_predictions = []
 
-for i, row in filtered_missing_info.iterrows():
-    game_id = row["Game_ID"]
-    missing_col = row["Missing_Player_Column"]
+for filename in os.listdir(preprocessed_test_folder):
+    if filename.endswith(".csv"):  # Process only CSV files
+        file_path = os.path.join(preprocessed_test_folder, filename)
+        print(f"📂 Making predictions for {filename}...")
 
-    print(f"🟢 Using Model for Game {game_id}, Missing: {missing_col}")
+        # Load preprocessed test data
+        df = pd.read_csv(file_path)
 
-    # Find the corresponding model
-    model_index = ["home_0", "home_1", "home_2", "home_3", "home_4"].index(missing_col)
-    model_path = os.path.join(model_folder, f"xgboost_model_{model_index}.pkl")
+        # ✅ Ensure test data is not empty
+        if df.empty:
+            print(f"⚠ Warning: {filename} is empty. Skipping...")
+            continue
 
-    # Load the correct model
-    with open(model_path, "rb") as f:
-        model = pickle.load(f)
+        # ✅ Ensure columns match the training format
+        required_columns = ["season", "team", "player_0", "player_1", "player_2", "player_3"]
+        missing_columns = [col for col in required_columns if col not in df.columns]
 
-    # Prepare the input for prediction
-    X_sample = X_test.loc[[game_id]].drop(columns=[missing_col])
+        if missing_columns:
+            print(f"❌ ERROR: Missing columns {missing_columns} in {filename}. Skipping...")
+            continue
 
-    # Make prediction
-    y_pred = model.predict(X_sample)[0]
-
-    # Convert back to player name
-    predicted_player = reverse_player_dict.get(y_pred, f"Unknown_Player_{y_pred}")
-
-
-    # Ensure the column is of string type before inserting player names
-    final_predictions[missing_col] = final_predictions[missing_col].astype(str)
-    final_predictions.at[game_id, missing_col] = predicted_player
+        # ✅ Define `X_test`
+        X_test = df[required_columns]
 
 
-# Extract only the predicted players and save the final output
-final_output = pd.DataFrame({"missing_player": final_predictions[missing_col]})
-final_output.to_csv(output_predictions_path, index=False)
+        # Make predictions
+        y_pred = model.predict(X_test)
 
+        # Convert predictions back to player names
+        predicted_players = [reverse_player_dict.get(int(player), "Unknown Player") for player in y_pred]
+
+        # Store results
+        for i, row in df.iterrows():
+            final_predictions.append([predicted_players[i]])
+
+# Convert to DataFrame
+final_df = pd.DataFrame(final_predictions, columns=["missing_player"])
+
+# Save predictions
+final_df.to_csv(output_predictions_path, index=False)
 print(f"✅ Final predictions saved at: {output_predictions_path}")
