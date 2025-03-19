@@ -10,7 +10,7 @@ os.makedirs(filtered_folder, exist_ok=True)
 
 # Define the required columns to keep
 required_columns = [
-    "game", "season", "home_team", "away_team", "starting_min",
+    "season", "home_team", "away_team",
     "home_0", "home_1", "home_2", "home_3", "home_4",
     "away_0", "away_1", "away_2", "away_3", "away_4", "outcome"
 ]
