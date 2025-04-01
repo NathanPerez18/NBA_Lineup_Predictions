@@ -1,4 +1,5 @@
 Model/xgboost_model_v2.pkl
-/Model
-/RawData
-/Train
+Model/
+RawData/
+Train/
+venv/
