@@ -1,35 +1,45 @@
 import pandas as pd
-import os
 
-# Define file paths
-answers_path = "../Test/professor_answers.csv"
-predictions_path = "../Model/final_predictions.csv"
+# ----------------------------
+# 🔍 Load predictions
+# ----------------------------
+predictions_path = "../Model/final_predictions_top10.csv"
+df = pd.read_csv(predictions_path)
 
-# Load data
-answers_df = pd.read_csv(answers_path)
-predictions_df = pd.read_csv(predictions_path)
+# ----------------------------
+# ✅ Compare actual vs. predictions
+# ----------------------------
+results = []
+season_accuracy = {}
 
-# Ensure column names match
-answers_df.columns = ["missing_player"]
-predictions_df.columns = ["predicted_player"]
+for _, row in df.iterrows():
+    actual = row["actual_player"]
+    season = row["season"]
 
-# Check if both files have the same number of rows
-if len(answers_df) != len(predictions_df):
-    print(f"⚠️ Warning: Answer file has {len(answers_df)} rows, but predictions file has {len(predictions_df)} rows.")
+    # Get list of top-10 predicted players
+    predicted_players = [row[f"top{i}_player"] for i in range(1, 11)]
 
-# Compare row by row
-correct = 0
-total = len(answers_df)
+    # Check if actual is in top-10
+    is_correct = actual in predicted_players
+    results.append(is_correct)
 
-for i, (true_value, predicted_value) in enumerate(zip(answers_df["missing_player"], predictions_df["predicted_player"])):
-    if true_value == predicted_value:
-        correct += 1
+    # Track accuracy by season
+    if season not in season_accuracy:
+        season_accuracy[season] = {"correct": 0, "total": 0}
 
-    # Print running total every 10 rows
-    if (i + 1) % 10 == 0:
-        accuracy = (correct / (i + 1)) * 100
-        print(f"✅ Checked {i + 1} rows - Accuracy so far: {accuracy:.2f}%")
+    season_accuracy[season]["total"] += 1
+    if is_correct:
+        season_accuracy[season]["correct"] += 1
 
-# Final accuracy
-final_accuracy = (correct / total) * 100
-print(f"🎯 Final Accuracy: {final_accuracy:.2f}% ({correct}/{total} correct predictions)")
+# ----------------------------
+# 📊 Print results
+# ----------------------------
+overall_accuracy = sum(results) / len(results) if results else 0
+print(f"\n🎯 Overall Top-10 Accuracy: {overall_accuracy * 100:.2f}%")
+
+print("\n📅 Accuracy by Season:")
+for season, stats in sorted(season_accuracy.items()):
+    correct = stats["correct"]
+    total = stats["total"]
+    acc = (correct / total) * 100 if total > 0 else 0
+    print(f"  {season}: {acc:.2f}% ({correct}/{total})")

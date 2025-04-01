@@ -1,65 +1,59 @@
 import os
 import pandas as pd
 
-# Define paths
-encoded_test_folder = "../Encoded_Test"
-preprocessed_test_folder = "../Pre-Processed-Test"
+# ----------------------------
+# File Paths
+# ----------------------------
+encoded_test_path = "Encoded_Test/professor_test_data.csv"
+answers_path = "Test/professor_answers.csv"
+output_path = "Model/X_test.csv"
 
-# Ensure the pre-processed test folder exists
-os.makedirs(preprocessed_test_folder, exist_ok=True)
+# Ensure output directory exists
+os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-# Columns to check for missing players (-1)
-player_columns = ["home_0", "home_1", "home_2", "home_3", "home_4",
-                  "away_0", "away_1", "away_2", "away_3", "away_4"]
-team_columns = ["home_team", "away_team"]
+# ----------------------------
+# Load Data
+# ----------------------------
+df_test = pd.read_csv(encoded_test_path)
+df_answers = pd.read_csv(answers_path)
+
+# ----------------------------
+# Configuration
+# ----------------------------
+home_cols = [f"home_{i}" for i in range(5)]
 season_column = "season"
+team_column = "home_team"
+answer_column = "missing_player"
 
-# ---------------------------
-# Step 1: Process Each Encoded Test File
-# ---------------------------
-for filename in os.listdir(encoded_test_folder):
-    if filename.endswith(".csv"):  # Process only CSV files
-        file_path = os.path.join(encoded_test_folder, filename)
-        print(f"📂 Processing {filename}...")
+# ----------------------------
+# Processing Logic
+# ----------------------------
+processed_rows = []
 
-        # Load encoded test data
-        df = pd.read_csv(file_path)
+for idx, row in df_test.iterrows():
+    player_values = row[home_cols].values.tolist()
+    
+    # Identify missing position
+    try:
+        missing_index = player_values.index(-1)
+    except ValueError:
+        continue  # skip if no missing player
 
-        # ✅ Normalize column names to avoid mismatches
-        df.columns = df.columns.str.strip().str.lower()
+    # Remove the missing player
+    player_values.pop(missing_index)
 
-        # Store the processed rows
-        processed_rows = []
+    # Grab the answer from the same row in the answers file
+    actual_missing_player = df_answers.loc[idx, answer_column]
 
-        # Iterate over test rows
-        for _, row in df.iterrows():
-            # Identify which column has the missing player (-1)
-            missing_col = None
-            for col in player_columns:
-                if row[col] == -1:
-                    missing_col = col
-                    break  # Stop once we find the missing player
-            
-            if missing_col is None:
-                continue  # Skip if no missing player found
-            
-            # Determine the team associated with the missing player
-            team_col = "home_team" if "home_" in missing_col else "away_team"
-            team = row[team_col]
+    # Assemble the new row
+    new_row = [row[season_column], row[team_column]] + player_values + [missing_index, actual_missing_player]
+    processed_rows.append(new_row)
 
-            # Get the other 4 players from the same team
-            team_players = [col for col in player_columns if team_col.split("_")[0] in col and col != missing_col]
-            player_values = row[team_players].values.tolist()
+# ----------------------------
+# Save Output
+# ----------------------------
+columns = ["season", "team", "player_0", "player_1", "player_2", "player_3", "missing_position", "missing_player"]
+X_test_df = pd.DataFrame(processed_rows, columns=columns)
+X_test_df.to_csv(output_path, index=False)
 
-            # Store processed data (season, team, 4 players)
-            processed_rows.append([row[season_column], team] + player_values)
-
-        # Convert to DataFrame
-        processed_df = pd.DataFrame(processed_rows, columns=["season", "team", "player_0", "player_1", "player_2", "player_3"])
-
-        # Save processed test data
-        processed_path = os.path.join(preprocessed_test_folder, filename)
-        processed_df.to_csv(processed_path, index=False)
-        print(f"✅ Processed test data saved at: {processed_path}")
-
-print("🎯 All test files have been pre-processed and saved!")
+print(f"✅ Saved: {output_path}")
