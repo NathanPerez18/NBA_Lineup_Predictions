@@ -67,7 +67,7 @@ print(f"Test data shape: {X_test.shape}")
 # ----------------------
 # Make Predictions
 # ----------------------
-print("🔍 Making predictions...")
+print("Making predictions...")
 
 y_probs = model.predict_proba(X_test)
 final_predictions = []
@@ -97,20 +97,34 @@ for i, row_probs in enumerate(y_probs):
     filtered = [(idx, row_probs[idx]) for idx in top_15_indices if idx in valid_players]
     filtered = filtered[:10]
 
-        # If not enough predictions, apply role fallback using frequency data
+        # Fallback: Add from role frequencies first
     if len(filtered) < FALLBACK_THRESHOLD and season_str and team_str:
         role_key = f"home_{missing_positions[i]}"
         fallback_list = role_frequencies.get(season_str, {}).get(team_str, {}).get(role_key, {})
 
+        used_ids = {idx for idx, _ in filtered}
+
         if fallback_list:
-            sorted_fallbacks = sorted(fallback_list.items(), key=lambda x: -x[1])  # most frequent first
+            sorted_fallbacks = sorted(fallback_list.items(), key=lambda x: -x[1])
             for player_name, _ in sorted_fallbacks:
                 encoded_id = player_dict.get(player_name)
-                already_used_ids = [idx for idx, _ in filtered]
-                if encoded_id and encoded_id not in already_used_ids:
+                if encoded_id and encoded_id not in used_ids:
                     filtered.append((encoded_id, 0.0))
+                    used_ids.add(encoded_id)
                     if len(filtered) == FALLBACK_THRESHOLD:
                         break
+
+        # Fallback to full team roster if still not enough
+        if len(filtered) < FALLBACK_THRESHOLD:
+            roster = season_team_rosters.get(season_str, {}).get(team_str, [])
+            for player_name in roster:
+                encoded_id = player_dict.get(player_name)
+                if encoded_id and encoded_id not in used_ids:
+                    filtered.append((encoded_id, 0.0))
+                    used_ids.add(encoded_id)
+                    if len(filtered) == FALLBACK_THRESHOLD:
+                        break
+
 
 
     # Final padding
@@ -121,12 +135,12 @@ for i, row_probs in enumerate(y_probs):
     top_10_players = []
     for idx, _ in filtered:
         if idx is None:
-            top_10_players.append("Unknown Player")
+            top_10_players.append("Unknown Player1")
         elif idx in class_to_player:
             top_10_players.append(class_to_player[idx])
         else:
             # Fallback: decode using reverse player_dict
-            name = next((name for name, encoded in player_dict.items() if encoded == idx), "Unknown Player")
+            name = next((name for name, encoded in player_dict.items() if encoded == idx), "Unknown Player2")
             top_10_players.append(name)
 
     top_10_probs = [round(prob, 4) for _, prob in filtered]
